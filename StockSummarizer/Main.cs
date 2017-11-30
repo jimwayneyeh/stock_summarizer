@@ -8,7 +8,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+
 using static StockSummarizer.lib.StockRecordOperation;
+using StockSummarizer.model;
 
 namespace StockSummarizer
 {
@@ -34,6 +36,7 @@ namespace StockSummarizer
         {
             gridView.DataSource = table.DefaultView;
 
+            table.Columns.Add("編號", Type.GetType("System.String"));
             table.Columns.Add("日期", Type.GetType("System.String"));
             table.Columns.Add("股票代碼", Type.GetType("System.String"));
             table.Columns.Add("價格", Type.GetType("System.Decimal"));
@@ -43,10 +46,34 @@ namespace StockSummarizer
 
         private void click_add_button(object sender, EventArgs e)
         {
+            if (symbol.Text.Length < 1)
+            {
+                MessageBox.Show("必須輸入股票代碼。");
+                return;
+            }
+
             RecordType actionType;
             Enum.TryParse<RecordType>(action.SelectedValue.ToString(), out actionType);
 
-            operation.recordTransaction(stockTime.Value, symbol.Text, price.Value, amount.Value, actionType);
+            Nullable<Guid> resultId = operation.recordTransaction(stockTime.Value, symbol.Text, price.Value, amount.Value, actionType);
+            
+            if (resultId.HasValue)
+            {
+                switch (actionType)
+                {
+                    case RecordType.買進:
+                        break;
+                    case RecordType.賣出:
+                        TransactionMappingForm form = new TransactionMappingForm(resultId.Value);
+                        form.ShowDialog();
+                        break;
+                    case RecordType.內部借券:
+                    case RecordType.回補:
+                        break;
+                }
+
+                MessageBox.Show("新增成功！");
+            }
 
             operation.updateView(table, stockTime.Value);
         }

@@ -12,6 +12,8 @@ using System.Diagnostics;
 using System.ComponentModel;
 using System.Reflection;
 
+using StockSummarizer.model;
+
 namespace StockSummarizer.lib
 {
     class StockRecordOperation
@@ -19,18 +21,12 @@ namespace StockSummarizer.lib
         static string dbPath = @".\stock_summarizer.sqlite";
         static string cnStr = "data source=" + dbPath + ";Version=3;";
 
-        static string transactionTable = "stock_transactions";
+        public static string transactionTable = "stock_transactions";
 
         // 1 - 0.003 - 0.001425
         private static decimal sellTax = 0.995575m;
         // 1 + 0.001425
         private static decimal buyTax = 1.001425m;
-
-        public enum RecordType {
-            買進,
-            賣出,
-            內部借券,
-            回補};
 
         private int page = 1;
         private int numberPerPage = 20;
@@ -50,12 +46,13 @@ namespace StockSummarizer.lib
 
                     // Create database.
                     String sql = String.Format(
-                        "CREATE TABLE IF NOT EXISTS {0} (symbol VARCHAR(6), price NUMERIC, amount NUMERIC, timestamp STRING, action NUMERIC)", 
+                        "CREATE TABLE IF NOT EXISTS {0} (guid STRING PRIMARY KEY, symbol VARCHAR(6), price NUMERIC, amount NUMERIC, timestamp STRING, action NUMERIC, remain_amount NUMERIC)", 
                         transactionTable);
                     new SQLiteCommand(sql, conn).ExecuteNonQuery();
 
                     // Create index.
-                    sql = "CREATE INDEX IF NOT EXISTS timestamp_index ON stock_summarizer (timestamp)";
+                    sql = String.Format("CREATE INDEX IF NOT EXISTS timestamp_index ON {0} (timestamp)",
+                        transactionTable);
                     new SQLiteCommand(sql, conn).ExecuteNonQuery();
                 }
                 finally
@@ -65,7 +62,7 @@ namespace StockSummarizer.lib
             }
         }
 
-        public Int32 recordTransaction(DateTime time, String symbol, decimal price, decimal amount, RecordType actionType)
+        public Nullable<Guid> recordTransaction(DateTime time, String symbol, decimal price, decimal amount, RecordType actionType)
         {
             using (SQLiteConnection conn = new SQLiteConnection(cnStr))
             {
@@ -73,11 +70,19 @@ namespace StockSummarizer.lib
                 {
                     conn.Open();
 
+                    // Generate ID for this record.
+                    Guid id = System.Guid.NewGuid();
+
                     String sql = String.Format(
-                        "INSERT INTO {0} (symbol, price, amount, timestamp, action) VALUES ('{1}', {2}, {3}, '{4}', {5})",
-                        transactionTable, symbol, price, amount, time.ToLocalTime().ToString("s"), (Int16) actionType);
+                        "INSERT INTO {0} (symbol, price, amount, timestamp, action, guid, remain_amount) VALUES ('{1}', {2}, {3}, '{4}', {5}, '{6}', {3})",
+                        transactionTable, symbol, price, amount, time.ToLocalTime().ToString("s"), (Int16) actionType, id);
                     SQLiteCommand command = new SQLiteCommand(sql, conn);
-                    return command.ExecuteNonQuery();
+                    
+                    if (command.ExecuteNonQuery() > 0)
+                    {
+                        return id;
+                    }
+                    return null;
                 }
                 finally
                 {
@@ -137,6 +142,43 @@ namespace StockSummarizer.lib
                 }
             }
         }
+
+        public static Transaction getTransaction (Guid guid)
+        {
+            using (SQLiteConnection conn = new SQLiteConnection(cnStr))
+            {
+                try
+                {
+                    conn.Open();
+
+                    string sql = String.Format("SELECT * FROM {0} WHERE guid='{1}'", transactionTable, guid);
+                    Debug.WriteLine(String.Format("Try to find out a transaction: {0}", sql));
+                    SQLiteCommand command = new SQLiteCommand(sql, conn);
+                    SQLiteDataReader reader = command.ExecuteReader();
+
+                    if (reader.Read())
+                    {
+                        Transaction transaction = new Transaction();
+
+                        transaction.guid = guid;
+                        transaction.symbol = reader["symbol"].ToString();
+                        transaction.price = Decimal.Parse(reader["price"].ToString());
+                        transaction.amount = Decimal.Parse(reader["amount"].ToString());
+                        transaction.timestamp = DateTime.Parse(reader["timestamp"].ToString());
+                        transaction.action = (RecordType)Int16.Parse(reader["action"].ToString());
+                        transaction.remainAmount = Decimal.Parse(reader["remain_amount"].ToString()); 
+                        return transaction;
+                    }
+
+                    Debug.WriteLine("No record is found.");
+
+                    return null;
+                }
+                finally
+                {
+                    conn.Close();
+                }
+            }
+        }
     }
 }
-
