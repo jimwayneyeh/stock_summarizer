@@ -65,6 +65,11 @@ namespace StockSummarizer.lib
             }
         }
 
+        public Transaction getTransaction ()
+        {
+            return transaction;
+        }
+
         public void getNotConsumedBuying(DataTable table)
         {
             using (SQLiteConnection conn = new SQLiteConnection(cnStr))
@@ -88,14 +93,57 @@ namespace StockSummarizer.lib
                         decimal amount = Decimal.Parse(reader["amount"].ToString());
 
                         DataRow row = table.NewRow();
+                        row["編號"] = reader["guid"];
                         row["日期"] = reader["timestamp"];
                         row["價格"] = price.ToString();
                         row["數量"] = amount.ToString();
 
-                        // TODO invisible column for GUID
-
                         table.Rows.Add(row);
                     }
+                }
+                finally
+                {
+                    conn.Close();
+                }
+            }
+        }
+
+        public int updateRemainingAmountToRecord(Guid id, decimal amount)
+        {
+            using (SQLiteConnection conn = new SQLiteConnection(cnStr))
+            {
+                try
+                {
+                    conn.Open();
+
+                    String sql = String.Format(
+                        "UPDATE {0} SET remain_amount = {1} WHERE guid = '{2}'",
+                        StockRecordOperation.transactionTable, amount, id);
+                    Debug.WriteLine(String.Format("SQL for updating remaining amount: {0}", sql));
+                    SQLiteCommand command = new SQLiteCommand(sql, conn);
+                    return command.ExecuteNonQuery();
+                }
+                finally
+                {
+                    conn.Close();
+                }
+            }
+        }
+
+        public int addBalanceRecord(Guid selectedId)
+        {
+            using (SQLiteConnection conn = new SQLiteConnection(cnStr))
+            {
+                try
+                {
+                    conn.Open();
+
+                    String sql = String.Format(
+                        "INSERT INTO {0} (guid, sell_id, buy_id) VALUES ({1}, {2}, {3})",
+                        balanceTable, transaction.guid, selectedId);
+                    Debug.WriteLine(String.Format("SQL for creating a balance record: {0}", sql));
+                    SQLiteCommand command = new SQLiteCommand(sql, conn);
+                    return command.ExecuteNonQuery();
                 }
                 finally
                 {
