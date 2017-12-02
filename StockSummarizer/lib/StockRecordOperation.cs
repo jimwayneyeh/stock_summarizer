@@ -48,12 +48,18 @@ namespace StockSummarizer.lib
                     String sql = String.Format(
                         "CREATE TABLE IF NOT EXISTS {0} (guid STRING PRIMARY KEY, symbol VARCHAR(6), price NUMERIC, amount NUMERIC, timestamp STRING, action NUMERIC, remain_amount NUMERIC)", 
                         transactionTable);
-                    new SQLiteCommand(sql, conn).ExecuteNonQuery();
+                    using (var command = new SQLiteCommand(sql, conn))
+                    {
+                        command.ExecuteNonQuery();
+                    }
 
                     // Create index.
                     sql = String.Format("CREATE INDEX IF NOT EXISTS timestamp_index ON {0} (timestamp)",
                         transactionTable);
-                    new SQLiteCommand(sql, conn).ExecuteNonQuery();
+                    using (var command = new SQLiteCommand(sql, conn))
+                    {
+                        command.ExecuteNonQuery();
+                    }
                 }
                 finally
                 {
@@ -76,13 +82,14 @@ namespace StockSummarizer.lib
                     String sql = String.Format(
                         "INSERT INTO {0} (symbol, price, amount, timestamp, action, guid, remain_amount) VALUES ('{1}', {2}, {3}, '{4}', {5}, '{6}', {3})",
                         transactionTable, symbol, price, amount, time.ToLocalTime().ToString("s"), (Int16) actionType, id);
-                    SQLiteCommand command = new SQLiteCommand(sql, conn);
-                    
-                    if (command.ExecuteNonQuery() > 0)
+                    using (SQLiteCommand command = new SQLiteCommand(sql, conn))
                     {
-                        return id;
+                        if (command.ExecuteNonQuery() > 0)
+                        {
+                            return id;
+                        }
+                        return null;
                     }
-                    return null;
                 }
                 finally
                 {
@@ -113,27 +120,30 @@ namespace StockSummarizer.lib
                     Debug.WriteLine(String.Format("SQL for data grid: {0}", sql));
 
                     conn.Open();
-                    SQLiteCommand command = new SQLiteCommand(sql, conn);
-                    SQLiteDataReader reader = command.ExecuteReader();
-
-                    while (reader.Read())
+                    using (SQLiteCommand command = new SQLiteCommand(sql, conn))
                     {
-                        Debug.WriteLine(String.Format("Row: {0} {1}", reader["timestamp"], reader["symbol"]));
+                        using (SQLiteDataReader reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                Debug.WriteLine(String.Format("Row: {0} {1}", reader["timestamp"], reader["symbol"]));
 
-                        decimal price = Decimal.Parse(reader["price"].ToString());
-                        decimal amount = Decimal.Parse(reader["amount"].ToString());
+                                decimal price = Decimal.Parse(reader["price"].ToString());
+                                decimal amount = Decimal.Parse(reader["amount"].ToString());
 
-                        RecordType actionType = (RecordType)Int16.Parse(reader["action"].ToString());
+                                RecordType actionType = (RecordType)Int16.Parse(reader["action"].ToString());
 
-                        DataRow row = table.NewRow();
-                        row["日期"] = reader["timestamp"];
-                        row["股票代碼"] = reader["symbol"];
-                        row["價格"] = price.ToString();
-                        row["數量"] = amount.ToString();
-                        row["類型"] = String.Format("{0}", actionType);
-                        
-                        
-                        table.Rows.Add(row);
+                                DataRow row = table.NewRow();
+                                row["日期"] = reader["timestamp"];
+                                row["股票代碼"] = reader["symbol"];
+                                row["價格"] = price.ToString();
+                                row["數量"] = amount.ToString();
+                                row["類型"] = String.Format("{0}", actionType);
+
+
+                                table.Rows.Add(row);
+                            }
+                        }
                     }
                 }
                 finally
@@ -153,26 +163,30 @@ namespace StockSummarizer.lib
 
                     string sql = String.Format("SELECT * FROM {0} WHERE guid='{1}'", transactionTable, guid);
                     Debug.WriteLine(String.Format("Try to find out a transaction: {0}", sql));
-                    SQLiteCommand command = new SQLiteCommand(sql, conn);
-                    SQLiteDataReader reader = command.ExecuteReader();
 
-                    if (reader.Read())
+                    using (SQLiteCommand command = new SQLiteCommand(sql, conn))
                     {
-                        Transaction transaction = new Transaction();
+                        using (SQLiteDataReader reader = command.ExecuteReader())
+                        {
+                            if (reader.Read())
+                            {
+                                Transaction transaction = new Transaction();
 
-                        transaction.guid = guid;
-                        transaction.symbol = reader["symbol"].ToString();
-                        transaction.price = Decimal.Parse(reader["price"].ToString());
-                        transaction.amount = Decimal.Parse(reader["amount"].ToString());
-                        transaction.timestamp = DateTime.Parse(reader["timestamp"].ToString());
-                        transaction.action = (RecordType)Int16.Parse(reader["action"].ToString());
-                        transaction.remainAmount = Decimal.Parse(reader["remain_amount"].ToString()); 
-                        return transaction;
+                                transaction.guid = guid;
+                                transaction.symbol = reader["symbol"].ToString();
+                                transaction.price = Decimal.Parse(reader["price"].ToString());
+                                transaction.amount = Decimal.Parse(reader["amount"].ToString());
+                                transaction.timestamp = DateTime.Parse(reader["timestamp"].ToString());
+                                transaction.action = (RecordType)Int16.Parse(reader["action"].ToString());
+                                transaction.remainAmount = Decimal.Parse(reader["remain_amount"].ToString());
+                                return transaction;
+                            }
+
+                            Debug.WriteLine("No record is found.");
+
+                            return null;
+                        }
                     }
-
-                    Debug.WriteLine("No record is found.");
-
-                    return null;
                 }
                 finally
                 {

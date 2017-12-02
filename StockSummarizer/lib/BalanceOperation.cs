@@ -47,16 +47,25 @@ namespace StockSummarizer.lib
                         + "FOREIGN KEY(sell_id) REFERENCES {1}(guid), "
                         + "FOREIGN KEY(buy_id) REFERENCES {1}(guid))",
                         balanceTable, StockRecordOperation.transactionTable);
-                    new SQLiteCommand(sql, conn).ExecuteNonQuery();
+                    using (var command = new SQLiteCommand(sql, conn))
+                    {
+                        command.ExecuteNonQuery();
+                    }
 
                     // Create index.
                     sql = String.Format("CREATE INDEX IF NOT EXISTS sell_id_index ON {0} (sell_id)",
                         balanceTable);
-                    new SQLiteCommand(sql, conn).ExecuteNonQuery();
+                    using (var command = new SQLiteCommand(sql, conn))
+                    {
+                        command.ExecuteNonQuery();
+                    }
 
                     sql = String.Format("CREATE INDEX IF NOT EXISTS buy_id_index ON {0} (buy_id)",
                         balanceTable);
-                    new SQLiteCommand(sql, conn).ExecuteNonQuery();
+                    using (var command = new SQLiteCommand(sql, conn))
+                    {
+                        command.ExecuteNonQuery();
+                    }
                 }
                 finally
                 {
@@ -82,23 +91,28 @@ namespace StockSummarizer.lib
                         "SELECT * FROM {0} WHERE symbol = '{1}' AND amount > 0 AND action = {2}",
                         StockRecordOperation.transactionTable, this.transaction.symbol, (int) RecordType.買進);
                     Debug.WriteLine(String.Format("SQL: {0}", sql));
-                    SQLiteCommand command = new SQLiteCommand(sql, conn);
-                    SQLiteDataReader reader = command.ExecuteReader();
 
-                    table.Clear();
-
-                    while(reader.Read())
+                    using (var command = new SQLiteCommand(sql, conn))
                     {
-                        decimal price = Decimal.Parse(reader["price"].ToString());
-                        decimal amount = Decimal.Parse(reader["amount"].ToString());
+                        command.ExecuteNonQuery();
 
-                        DataRow row = table.NewRow();
-                        row["編號"] = reader["guid"];
-                        row["日期"] = reader["timestamp"];
-                        row["價格"] = price.ToString();
-                        row["數量"] = amount.ToString();
+                        using (SQLiteDataReader reader = command.ExecuteReader()) {
+                            table.Clear();
 
-                        table.Rows.Add(row);
+                            while (reader.Read())
+                            {
+                                decimal price = Decimal.Parse(reader["price"].ToString());
+                                decimal amount = Decimal.Parse(reader["amount"].ToString());
+
+                                DataRow row = table.NewRow();
+                                row["編號"] = reader["guid"];
+                                row["日期"] = reader["timestamp"];
+                                row["價格"] = price.ToString();
+                                row["數量"] = amount.ToString();
+
+                                table.Rows.Add(row);
+                            }
+                        }
                     }
                 }
                 finally
@@ -120,8 +134,10 @@ namespace StockSummarizer.lib
                         "UPDATE {0} SET remain_amount = {1} WHERE guid = '{2}'",
                         StockRecordOperation.transactionTable, amount, id);
                     Debug.WriteLine(String.Format("SQL for updating remaining amount: {0}", sql));
-                    SQLiteCommand command = new SQLiteCommand(sql, conn);
-                    return command.ExecuteNonQuery();
+                    using (SQLiteCommand command = new SQLiteCommand(sql, conn))
+                    {
+                        return command.ExecuteNonQuery();
+                    }
                 }
                 finally
                 {
@@ -137,13 +153,15 @@ namespace StockSummarizer.lib
                 try
                 {
                     conn.Open();
-
+                    
                     String sql = String.Format(
-                        "INSERT INTO {0} (guid, sell_id, buy_id) VALUES ({1}, {2}, {3})",
-                        balanceTable, transaction.guid, selectedId);
+                        "INSERT INTO {0} (guid, sell_id, buy_id) VALUES ('{1}', '{2}', '{3}')",
+                        balanceTable, Guid.NewGuid(), transaction.guid, selectedId);
                     Debug.WriteLine(String.Format("SQL for creating a balance record: {0}", sql));
-                    SQLiteCommand command = new SQLiteCommand(sql, conn);
-                    return command.ExecuteNonQuery();
+                    using (SQLiteCommand command = new SQLiteCommand(sql, conn))
+                    {
+                        return command.ExecuteNonQuery();
+                    }
                 }
                 finally
                 {

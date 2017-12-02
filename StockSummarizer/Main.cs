@@ -83,5 +83,10 @@ namespace StockSummarizer
             Control sender = (Control)senderObj;
             sender.Text = String.Empty;
         }
+
+        private void monthSelector_ValueChanged(object sender, EventArgs e)
+        {
+            operation.updateView(table, monthSelector.Value);
+        }
     }
 }
