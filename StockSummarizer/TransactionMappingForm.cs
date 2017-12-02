@@ -58,7 +58,6 @@ namespace StockSummarizer
 
         private void chooseButton_Click(object sender, EventArgs e)
         {
-            Debug.WriteLine("choose");
             foreach (DataGridViewRow item in gridView.SelectedRows)
             {
                 DataRow row = table.Rows[item.Index];

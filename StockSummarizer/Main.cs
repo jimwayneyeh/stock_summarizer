@@ -16,8 +16,13 @@ namespace StockSummarizer
 {
     public partial class Main : Form
     {
-        private StockRecordOperation operation = new StockRecordOperation();
-        private DataTable table = new DataTable();
+        private StockRecordOperation recordsOpt = new StockRecordOperation();
+
+        private DataTable recordsTable = new DataTable();
+        private DataTable balanceTable = new DataTable();
+
+        private int balancePage = 1;
+        private int numberPerPage = 20;
 
         public Main()
         {
@@ -27,23 +32,63 @@ namespace StockSummarizer
 
             action.DataSource = Enum.GetValues(typeof(RecordType));
 
-            operation.initializeDatabase();
-
-            operation.updateView(table, stockTime.Value);
+            tabControl1_SelectedIndexChanged(null, null);
         }
 
         private void initializeView()
         {
-            gridView.DataSource = table.DefaultView;
+            // Views in sumary tab.
+            mappingGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            mappingGrid.DataSource = balanceTable.DefaultView;
 
-            table.Columns.Add("編號", Type.GetType("System.String"));
-            table.Columns.Add("日期", Type.GetType("System.String"));
-            table.Columns.Add("股票代碼", Type.GetType("System.String"));
-            table.Columns.Add("價格", Type.GetType("System.Decimal"));
-            table.Columns.Add("數量", Type.GetType("System.String"));
-            table.Columns.Add("類型", Type.GetType("System.String"));
+            balanceTable.Columns.Add("日期", Type.GetType("System.String"));
+            balanceTable.Columns.Add("股票代碼", Type.GetType("System.String"));
+            balanceTable.Columns.Add("賣出價格", Type.GetType("System.Decimal"));
+            balanceTable.Columns.Add("數量", Type.GetType("System.String"));
+            balanceTable.Columns.Add("買進價格", Type.GetType("System.Decimal"));
+            balanceTable.Columns.Add("賣出總價", Type.GetType("System.Decimal"));
+            balanceTable.Columns.Add("買進總價", Type.GetType("System.Decimal"));
+            balanceTable.Columns.Add("價差", Type.GetType("System.Decimal"));
+
+            // Views in records tab.
+            recordView.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            recordView.DataSource = recordsTable.DefaultView;
+
+            recordsTable.Columns.Add("編號", Type.GetType("System.String"));
+            recordsTable.Columns.Add("日期", Type.GetType("System.String"));
+            recordsTable.Columns.Add("股票代碼", Type.GetType("System.String"));
+            recordsTable.Columns.Add("價格", Type.GetType("System.Decimal"));
+            recordsTable.Columns.Add("數量", Type.GetType("System.String"));
+            recordsTable.Columns.Add("類型", Type.GetType("System.String"));
         }
 
+        private void tabControl1_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            // Refresh the view of summary.
+            updateSummaryView();
+
+            // Refresh the view of records.
+            recordsOpt.initializeDatabase();
+            recordsOpt.updateView(recordsTable, stockTime.Value);
+        }
+
+        #region sumary tab
+        private void mappingMonthSelector_ValueChanged(object sender, EventArgs e)
+        {
+            updateSummaryView();
+        }
+
+        private void updateSummaryView ()
+        {
+            BalanceOperation.updateView(balanceTable, mappingMonthSelector.Value, numberPerPage, balancePage);
+
+            decimal totalDiff = BalanceOperation.calculateMonthlyTotal(balanceTable);
+            monthlyProfit.Text = String.Format("{0:0.000}", totalDiff * 1000);
+            monthlyProfit.ForeColor = (totalDiff > 0) ? Color.Red : Color.Green;
+        }
+        #endregion
+
+        #region record tab
         private void click_add_button(object sender, EventArgs e)
         {
             if (symbol.Text.Length < 1)
@@ -51,11 +96,21 @@ namespace StockSummarizer
                 MessageBox.Show("必須輸入股票代碼。");
                 return;
             }
+            if (price.Value < 1)
+            {
+                MessageBox.Show("必須輸入合法的交易價格。");
+                return;
+            }
+            if (amount.Value < 1)
+            {
+                MessageBox.Show("必須輸入合法的交易數量。");
+                return;
+            }
 
             RecordType actionType;
             Enum.TryParse<RecordType>(action.SelectedValue.ToString(), out actionType);
 
-            Nullable<Guid> resultId = operation.recordTransaction(stockTime.Value, symbol.Text, price.Value, amount.Value, actionType);
+            Nullable<Guid> resultId = recordsOpt.recordTransaction(stockTime.Value, symbol.Text, price.Value, amount.Value, actionType);
             
             if (resultId.HasValue)
             {
@@ -75,7 +130,25 @@ namespace StockSummarizer
                 MessageBox.Show("新增成功！");
             }
 
-            operation.updateView(table, stockTime.Value);
+            recordsOpt.updateView(recordsTable, stockTime.Value);
+        }
+
+        private void recordDeleteButton_Click(object sender, EventArgs e)
+        {
+            DialogResult result = MessageBox.Show("確定要刪除選取的紀錄嗎？", "確認刪除", MessageBoxButtons.YesNo);
+            if (result == DialogResult.No)
+            {
+                return;
+            }
+
+            // Start delete the records.
+            foreach (DataGridViewRow item in recordView.SelectedRows)
+            {
+                DataRow row = recordsTable.Rows[item.Index];
+                recordsOpt.deleteRecord(Guid.Parse(row["編號"].ToString()));
+            }
+
+            recordsOpt.updateView(recordsTable, stockTime.Value);
         }
 
         private void clear_when_enter(object senderObj, EventArgs e)
@@ -86,7 +159,8 @@ namespace StockSummarizer
 
         private void monthSelector_ValueChanged(object sender, EventArgs e)
         {
-            operation.updateView(table, monthSelector.Value);
+            recordsOpt.updateView(recordsTable, monthSelector.Value);
         }
+        #endregion
     }
 }

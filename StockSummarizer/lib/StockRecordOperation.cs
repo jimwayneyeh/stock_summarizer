@@ -134,12 +134,12 @@ namespace StockSummarizer.lib
                                 RecordType actionType = (RecordType)Int16.Parse(reader["action"].ToString());
 
                                 DataRow row = table.NewRow();
+                                row["編號"] = reader["guid"];
                                 row["日期"] = reader["timestamp"];
                                 row["股票代碼"] = reader["symbol"];
                                 row["價格"] = price.ToString();
                                 row["數量"] = amount.ToString();
                                 row["類型"] = String.Format("{0}", actionType);
-
 
                                 table.Rows.Add(row);
                             }
@@ -151,6 +151,38 @@ namespace StockSummarizer.lib
                     conn.Close();
                 }
             }
+        }
+
+        public bool deleteRecord (Guid id)
+        {
+            Transaction deletedTransaction = getTransaction(id);
+
+            using (SQLiteConnection conn = new SQLiteConnection(cnStr))
+            {
+                try
+                {
+                    conn.Open();
+
+                    string sql = String.Format("DELETE FROM {0} WHERE guid='{1}'", transactionTable, id);
+                    using (SQLiteCommand command = new SQLiteCommand(sql, conn))
+                    {
+                        int result = command.ExecuteNonQuery();
+
+                        if (result < 1)
+                        {
+                            return false;
+                        }
+                    }
+
+                    // TODO Checking the transaction mapping.
+                }
+                finally
+                {
+                    conn.Close();
+                }
+            }
+
+            return false;
         }
 
         public static Transaction getTransaction (Guid guid)

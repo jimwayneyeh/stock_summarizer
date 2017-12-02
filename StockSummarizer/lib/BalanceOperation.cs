@@ -19,6 +19,11 @@ namespace StockSummarizer.lib
         static string cnStr = "data source=" + dbPath + ";Version=3;";
         static string balanceTable = "stock_balance";
 
+        // 1 - 0.003 - 0.001425
+        static Decimal sellTax = 0.995575m;
+        // 1 + 0.001425
+        static Decimal buyTax = 1.001425m;
+
         private Transaction transaction;
 
         public BalanceOperation(Guid guid)
@@ -175,6 +180,86 @@ namespace StockSummarizer.lib
             string sql = String.Format(
                 "SELECT * FROM {0}, {1} WHERE {0}.sell_id = {1}.guid AND {0}.buy_id = {1}.guid",
                 balanceTable, StockRecordOperation.transactionTable);
+        }
+
+        public static void updateView(DataTable table, DateTime date, int numberPerPage, int page)
+        {
+            table.Clear();
+
+            using (SQLiteConnection conn = new SQLiteConnection(cnStr))
+            {
+                try
+                {
+                    DateTime nextMonth = date.AddMonths(1);
+                    DateTime startOfNextMonth = new DateTime(nextMonth.Year, nextMonth.Month, 1);
+                    DateTime endOfLastMonth = new DateTime(date.Year, date.Month, 1).AddDays(-1);
+
+                    String sql = String.Format(
+                        "SELECT REC_SELL.timestamp, REC_SELL.amount, REC_SELL.price AS sell_price, REC_SELL.symbol, REC_BUY.price AS buy_price FROM {0} AS MAP " +
+                        "LEFT JOIN {1} AS REC_SELL ON MAP.sell_id = REC_SELL.guid " +
+                        "LEFT JOIN {1} AS REC_BUY ON MAP.buy_id = REC_BUY.guid " +
+                        "WHERE REC_SELL.timestamp < '{2}' AND REC_SELL.timestamp > '{3}' ORDER BY REC_SELL.timestamp DESC LIMIT {4} OFFSET {5}",
+                        balanceTable,
+                        StockRecordOperation.transactionTable,
+                        String.Format("{0}-{1:00}-{2:00}", startOfNextMonth.Year, startOfNextMonth.Month, startOfNextMonth.Day),
+                        String.Format("{0}-{1:00}-{2:00}T24", endOfLastMonth.Year, endOfLastMonth.Month, endOfLastMonth.Day),
+                        numberPerPage, 
+                        numberPerPage * (page - 1));
+                    Debug.WriteLine(String.Format("SQL for showing sumary of monthly transactions: {0}", sql));
+
+                    conn.Open();
+
+                    using (SQLiteCommand command = new SQLiteCommand(sql, conn))
+                    {
+                        using (SQLiteDataReader reader = command.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                decimal sellPrice = Decimal.Parse(reader["sell_price"].ToString());
+                                decimal amount = Decimal.Parse(reader["amount"].ToString());
+                                decimal buyPrice = Decimal.Parse(reader["buy_price"].ToString());
+
+                                DataRow row = table.NewRow();
+                                row["日期"] = reader["timestamp"];
+                                row["股票代碼"] = reader["symbol"];
+                                row["賣出價格"] = sellPrice.ToString();
+                                row["數量"] = amount.ToString();
+                                row["買進價格"] = buyPrice.ToString();
+
+                                decimal totalSell = sellPrice * amount * sellTax * 1000m;
+                                decimal totalBuy = buyPrice * amount * buyTax * 1000m;
+                                row["賣出總價"] = String.Format("{0:0.000}", totalSell);
+                                row["買進總價"] = String.Format("{0:0.000}", totalBuy);
+                                row["價差"] = String.Format("{0:0.000}", (totalSell - totalBuy));
+
+                                table.Rows.Add(row);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    conn.Close();
+                }
+            }
+        }
+
+        public static decimal calculateMonthlyTotal(DataTable table)
+        {
+            decimal totalDiff = 0;
+
+            foreach (DataRow row in table.Rows)
+            {
+                decimal sellPrice = Decimal.Parse(row["賣出價格"].ToString());
+                Int32 amount = Int32.Parse(row["數量"].ToString());
+                decimal buyPrice = Decimal.Parse(row["買進價格"].ToString());
+
+                // 0.995575 = 1 - 0.003 - 0.001425
+                // 1 + 0.001425
+                totalDiff += sellPrice * amount * sellTax - buyPrice * amount * buyTax;
+            }
+
+            return totalDiff;
         }
     }
 }
